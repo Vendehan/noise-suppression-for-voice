@@ -40,20 +40,26 @@ There is a minimalistic GUI with all parameters and diagnostic stats:
 ### Plugin Settings
 
 - `VAD Threshold (%)` - if probability of sound being a voice is lower than this threshold - it will be silenced.
-  In most cases the threshold between 85% - 95% would be fine.
+  Valid range: 0–100%. Recommended default: **85%**; in most cases 85%–95% works well.
   Without the VAD some loud noises may still be a bit audible when there is no voice.
 - `VAD Grace Period (ms)` - for how long after the last voice detection the output won't be silenced. This helps when ends of words/sentences are being cut off.
 - `Retroactive VAD Grace Period (ms)` - similar to `VAD Grace Period (ms)` but for starts of words/sentences. :warning: This introduces latency!
+- `Mix` (0–100% or 0–1 in some hosts) - dry/wet blend. 100% (1.0) = fully processed (wet); 0% = dry only.
 
 ### Windows + Equalizer APO (VST2)
 
-To check or change mic settings go to "Recording devices" -> "Recording" -> "Properties" of the target mic -> "Advanced".
+**Download Equalizer APO:** [equalizerapo.com](https://equalizerapo.com/) or [SourceForge](https://sourceforge.net/projects/equalizerapo/). Equalizer APO is an open-source system-wide equalizer for Windows that supports VST plugins.
 
-To enable the plugin in Equalizer APO select "Plugins" -> "VST Plugin" and specify the plugin dll.
+**Installation steps (Windows 10/11):**
 
-See [detailed guide](https://medium.com/@bssankaran/free-and-open-source-software-noise-cancelling-for-working-from-home-edb1b4e9764e) provided by  [@bssankaran](https://github.com/bssankaran).
+1. Download and run the Equalizer APO installer from [equalizerapo.com](https://equalizerapo.com/).
+2. During setup, choose the audio device(s) you want to process (e.g. your microphone). You can change mic settings later via **Settings → System → Sound → Recording** (or right‑click the speaker icon → Sound settings → Recording), then **Properties** of the target mic → **Advanced**.
+3. Reboot when the installer prompts you.
+4. After reboot, open **Equalizer APO Configuration** (from Start or the installer folder).
+5. To add this plugin: **Plugins → VST Plugin** and point to the RNNoise plugin DLL (e.g. `rnnoise_mono.dll` or `rnnoise_stereo.dll` from the build output).
+6. The plugin has a GUI; you can adjust VAD threshold, grace periods, and mix there.
 
-- v1.0: Now there is a GUI, so it became easy to change parameters. 
+See also the [detailed guide](https://medium.com/@bssankaran/free-and-open-source-software-noise-cancelling-for-working-from-home-edb1b4e9764e) by [@bssankaran](https://github.com/bssankaran). 
 
 ### Linux
 
@@ -82,7 +88,7 @@ context.modules = [
                     plugin = /path/to/librnnoise_ladspa.so
                     label = noise_suppressor_mono
                     control = {
-                        "VAD Threshold (%)" = 50.0
+                        "VAD Threshold (%)" = 85.0
                         "VAD Grace Period (ms)" = 200
                         "Retroactive VAD Grace (ms)" = 0
                     }
@@ -140,7 +146,7 @@ pactl list sources short
 Then, create the new device using:
 ```sh
 pacmd load-module module-null-sink sink_name=mic_denoised_out rate=48000
-pacmd load-module module-ladspa-sink sink_name=mic_raw_in sink_master=mic_denoised_out label=noise_suppressor_mono plugin=/path/to/librnnoise_ladspa.so control=50,20,0,0,0
+pacmd load-module module-ladspa-sink sink_name=mic_raw_in sink_master=mic_denoised_out label=noise_suppressor_mono plugin=/path/to/librnnoise_ladspa.so control=85,20,0,85,1
 pacmd load-module module-loopback source=<your_mic_name> sink=mic_raw_in channels=1 source_dont_move=true sink_dont_move=true
 ```
 
@@ -151,13 +157,13 @@ You can automate this by creating file in `~/.config/pulse/default.pa` with the 
 .include /etc/pulse/default.pa
 
 load-module module-null-sink sink_name=mic_denoised_out rate=48000
-load-module module-ladspa-sink sink_name=mic_raw_in sink_master=mic_denoised_out label=noise_suppressor_mono plugin=/path/to/librnnoise_ladspa.so control=50,200,0,0,0
+load-module module-ladspa-sink sink_name=mic_raw_in sink_master=mic_denoised_out label=noise_suppressor_mono plugin=/path/to/librnnoise_ladspa.so control=85,200,0,85,1
 load-module module-loopback source=your_mic_name sink=mic_raw_in channels=1 source_dont_move=true sink_dont_move=true
 
 set-default-source mic_denoised_out.monitor
 ```
 
-The order of settings in `control=50,200,0,0,0` is: `VAD Threshold (%)`, `VAD Grace Period (ms)`, `Retroactive VAD Grace Period (ms)`, `Placeholder1`, `Placeholder2`.
+The order of settings in `control=85,200,0,85,1` is: `VAD Threshold (%)`, `VAD Grace Period (ms)`, `Retroactive VAD Grace Period (ms)`, `VAD Threshold (port)`, `Mix` (0–1, 1 = full wet). Recommended default for VAD Threshold: 85%.
 
 If you are absolutely sure that you want a stereo input use these options instead:
 
@@ -185,9 +191,19 @@ Further reading:
 
 </details>
 
-### MacOS
+### macOS
 
-TODO, contributions are welcomed!
+1. **Install the plugin:** Build the project (see [Compiling](#compiling)), then copy the built plug-ins to your user or system plug-in folder:
+   - **VST3:** `~/Library/Audio/Plug-Ins/VST3/` (or `/Library/Audio/Plug-Ins/VST3/` for all users)
+   - **AU (Audio Unit):** `~/Library/Audio/Plug-Ins/Components/` (or `/Library/Audio/Plug-Ins/Components/` for all users)
+   Create the directory if it does not exist.
+
+2. **Use in hosts:**
+   - **Logic Pro:** Add the plugin to a channel (e.g. Audio FX → AU Effects → [manufacturer] → RNNoise).
+   - **Reaper:** Add FX to a track → VST3 or AU → RNNoise.
+   - **OBS:** In OBS, add a filter to your microphone source: **Audio Capture** or use a virtual device that receives processed audio from a host (e.g. Reaper) via a loopback or aggregate device.
+
+3. **Apple Silicon (M1/M2/M3):** The plugin is built as a native ARM binary when you compile on Apple Silicon. Intel (x86) builds run under Rosetta 2 if needed. Use a native ARM build for best performance.
 
 ## Status
 
@@ -206,6 +222,16 @@ External dependencies are vendored via [git-subrepo](https://github.com/ingydotn
 Improvements are welcomed! Though if you want to contribute anything sizeable - open an issue first.
 
 ### Compiling
+
+**Linux (Ubuntu / Linux Mint / Debian):** Install build dependencies so JUCE and the plugins can compile (e.g. juceaide needs freetype and X11). Example:
+
+```sh
+sudo apt-get install -y build-essential cmake ninja-build
+sudo apt-get install -y libfreetype6-dev libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libcurl4-openssl-dev
+sudo apt-get install -y libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+On older distros you may need `libwebkit2gtk-4.0-dev` instead of `libwebkit2gtk-4.1-dev`. If the build reports a missing header (e.g. `ft2build.h`, `X11/extensions/Xrandr.h`), install the corresponding `-dev` package.
 
 Compiling for x64:
 ```sh
