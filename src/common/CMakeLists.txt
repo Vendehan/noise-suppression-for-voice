@@ -33,8 +33,11 @@ if (BUILD_TESTS)
             $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/external/catch2>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
     target_link_libraries(common_plugin_tests PRIVATE ${LIBRARIES})
-    target_compile_options(common_plugin_tests PRIVATE -fsanitize=undefined)
-    target_link_options(common_plugin_tests PRIVATE -fsanitize=undefined)
+    # UBSan only in Debug so Release builds are never instrumented
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+        target_compile_options(common_plugin_tests PRIVATE -fsanitize=undefined)
+        target_link_options(common_plugin_tests PRIVATE -fsanitize=undefined)
+    endif()
 
     include(CTest)
     include(Catch)
