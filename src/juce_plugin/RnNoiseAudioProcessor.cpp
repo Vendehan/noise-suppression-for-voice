@@ -14,7 +14,7 @@ RnNoiseAudioProcessor::RnNoiseAudioProcessor()
                                                                     "VAD Threshold",
                                                                     0.0f,
                                                                     1.0f,
-                                                                    0.6f),
+                                                                    0.85f),
                         std::make_unique<juce::AudioParameterInt>("vad_grace_period",
                                                                   "VAD Grace Period (10ms per unit)",
                                                                   0,
@@ -24,12 +24,18 @@ RnNoiseAudioProcessor::RnNoiseAudioProcessor()
                                                                   "Retroactive VAD Grace Period (10ms per unit)",
                                                                   0,
                                                                   10,
-                                                                  0)
+                                                                  0),
+                        std::make_unique<juce::AudioParameterFloat>("mix",
+                                                                    "Mix",
+                                                                    0.0f,
+                                                                    1.0f,
+                                                                    1.0f)
                 }) {
     m_vadThresholdParam = (juce::AudioParameterFloat *) m_parameters.getParameter("vad_threshold");
     m_vadGracePeriodParam = (juce::AudioParameterInt *) m_parameters.getParameter("vad_grace_period");
     m_vadRetroactiveGracePeriodParam = (juce::AudioParameterInt *) m_parameters.getParameter(
             "vad_retroactive_grace_period");
+    m_mixParam = (juce::AudioParameterFloat *) m_parameters.getParameter("mix");
 }
 
 RnNoiseAudioProcessor::~RnNoiseAudioProcessor() = default;
@@ -105,15 +111,10 @@ void RnNoiseAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto numSamples = buffer.getNumSamples();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear(i, 0, buffer.getNumSamples());
+        buffer.clear(i, 0, numSamples);
 
     const float *in[8] = {nullptr};
     float *out[8] = {nullptr};
@@ -122,9 +123,23 @@ void RnNoiseAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         out[channel] = buffer.getWritePointer(channel);
     }
 
-    m_rnNoisePlugin->process(in, out, static_cast<size_t>(buffer.getNumSamples()), m_vadThresholdParam->get(),
+    const float mix = m_mixParam->get();
+    juce::AudioBuffer<float> dryCopy;
+    if (mix < 1.0f) {
+        dryCopy.makeCopyOf(buffer);
+    }
+
+    m_rnNoisePlugin->process(in, out, static_cast<size_t>(numSamples), m_vadThresholdParam->get(),
                              static_cast<uint32_t>(m_vadGracePeriodParam->get()),
                              static_cast<uint32_t>(m_vadRetroactiveGracePeriodParam->get()));
+
+    // Dry/wet mix: output = dry * (1 - mix) + wet * mix
+    if (mix < 1.0f && dryCopy.getNumSamples() > 0) {
+        for (int ch = 0; ch < totalNumInputChannels; ++ch) {
+            buffer.applyGain(ch, 0, numSamples, mix);
+            buffer.addFrom(ch, 0, dryCopy, ch, 0, numSamples, 1.0f - mix);
+        }
+    }
 }
 
 //==============================================================================
