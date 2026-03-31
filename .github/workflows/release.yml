@@ -24,7 +24,10 @@ jobs:
           }
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout specific branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/issues-batch-1
 
       - name: Install Ubuntu dependencies
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
